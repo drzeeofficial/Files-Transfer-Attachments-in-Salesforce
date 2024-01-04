@@ -1,0 +1,41 @@
+trigger CreateFileRecievesFiles2 on File_Transfer__c (after update) {
+    List<File_Recieve__c> fileRecievesList = new List<File_Recieve__c>();
+    List<ContentDocumentLink> contentDocumentLinksToInsert = new List<ContentDocumentLink>();
+    
+    for (File_Transfer__c ft : Trigger.new) {
+        if (ft.Check_Point__c == 'Transfer') {
+            File_Recieve__c fr = new File_Recieve__c();
+            fr.File_Transfer__c = ft.Id;
+            fr.Subject__c = ft.Subject__c;
+            fr.Name = ft.Name;
+            
+            // Get the Lead that the File Transfer was created from
+            Lead leadRecord = [SELECT Id, Name, Email, Phone, Description, Company FROM Lead WHERE Id = :ft.Lead__c];
+            
+            // Copy over the attachments from the Lead to the File Receive record
+            List<ContentDocumentLink> leadContentDocumentLinks = [SELECT ContentDocumentId, LinkedEntityId FROM ContentDocumentLink WHERE LinkedEntityId = :leadRecord.Id];
+            
+            for (ContentDocumentLink contentDocumentLink : leadContentDocumentLinks) {
+                ContentDocumentLink newContentDocumentLink = new ContentDocumentLink();
+                newContentDocumentLink.ContentDocumentId = contentDocumentLink.ContentDocumentId;
+                newContentDocumentLink.LinkedEntityId = fr.Id;
+                newContentDocumentLink.ShareType = 'V';
+                contentDocumentLinksToInsert.add(newContentDocumentLink);
+            }
+            
+            fileRecievesList.add(fr);
+        }
+    }
+    
+    if (!fileRecievesList.isEmpty()) {
+        insert fileRecievesList;
+    }
+    
+    if (!contentDocumentLinksToInsert.isEmpty()) {
+        for (ContentDocumentLink contentDocumentLink : contentDocumentLinksToInsert) {
+            contentDocumentLink.LinkedEntityId = fileRecievesList[0].Id; // Assigning LinkedEntityId
+        }
+        insert contentDocumentLinksToInsert;
+    }
+}
+
